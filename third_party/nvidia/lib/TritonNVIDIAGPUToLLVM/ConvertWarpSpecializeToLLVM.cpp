@@ -15,6 +15,7 @@
 #include "triton/Conversion/TritonGPUToLLVM/Utility.h"
 #include "triton/Conversion/TritonGPUToLLVM/WarpSpecializeUtility.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
+#include "triton/Dialect/TritonNvidiaGPU/IR/Dialect.h"
 
 namespace mlir::triton {
 #define GEN_PASS_DEF_CONVERTWARPSPECIALIZETOLLVM
@@ -190,9 +191,11 @@ static LogicalResult lowerWarpSpecialize(LLVM::LLVMFuncOp func,
   // Tell PTXAS this value is warp-uniform.
   wid = targetInfo.shuffleIdx(b, b.getLoc(), wid, 0);
   Value isDefault = b.icmp_ult(wid, b.i32_val(defaultNumWarps));
-  if (tlx::tlxIsClustered(func) && !tlx::tlxExplicitClusterSync(func)) {
+  bool isClustered = tlx::tlxIsClustered(func) ||
+                     nvidia_gpu::getModuleTwoCTAs(func);
+  if (isClustered && !tlx::tlxExplicitClusterSync(func)) {
     // All these have to be true before we can insert an arrive here:
-    // - The kernel is in clustered mode
+    // - The kernel is in clustered mode (TLX or autoWS 2-CTA)
     // - There's no user controlled explicit cluster sync
     // - There's an ClusterWaitOp (then it had to be inserted by compiler)
     bool hasClusterBarWait =
